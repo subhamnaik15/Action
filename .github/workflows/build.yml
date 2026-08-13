@@ -55,13 +55,13 @@ jobs:
           echo "size=$APK_SIZE" >> $GITHUB_OUTPUT
           echo "APK Found: $APK_NAME ($APK_SIZE)"
 
-      # Step 6: Upload APK as artifact
-      - name: Upload APK as Artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: CodeAction-APK
-          path: ${{ steps.apk.outputs.path }}
-          retention-days: 30
+       # Step 6: Upload APK as artifact
+       - name: Upload APK as Artifact
+         uses: actions/upload-artifact@v4
+         with:
+           name: CodeAction-APK
+           path: ${{ steps.apk.outputs.path }}
+           retention-days: 30
 
       # Step 7: Send Success Email
       - name: Send Success Email Notification
