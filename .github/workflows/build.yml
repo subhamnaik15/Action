@@ -1,0 +1,130 @@
+name: Android Build & Email Notification
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  JAVA_VERSION: '11'
+  GRADLE_VERSION: 'wrapper'
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      checks: write
+
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2: Set up JDK 11
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: gradle
+
+      # Step 3: Make gradlew executable
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      # Step 4: Build the APK
+      - name: Build Release APK
+        run: ./gradlew clean assembleRelease --stacktrace
+
+      # Step 5: Find the APK file
+      - name: Find APK file
+        id: apk
+        run: |
+          APK_PATH=$(find . -name "*.apk" -type f | head -1)
+          APK_NAME=$(basename "$APK_PATH")
+          APK_SIZE=$(du -h "$APK_PATH" | cut -f1)
+          echo "path=$APK_PATH" >> $GITHUB_OUTPUT
+          echo "name=$APK_NAME" >> $GITHUB_OUTPUT
+          echo "size=$APK_SIZE" >> $GITHUB_OUTPUT
+          echo "APK Found: $APK_NAME ($APK_SIZE)"
+
+      # Step 6: Upload APK as artifact
+      - name: Upload APK as Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: CodeAction-APK
+          path: ${{ steps.apk.outputs.path }}
+          retention-days: 30
+
+      # Step 7: Send Success Email
+      - name: Send Success Email Notification
+        if: success()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.MAIL_SERVER }}
+          server_port: ${{ secrets.MAIL_PORT }}
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: '✅ Android Build SUCCESS - ${{ github.event.head_commit.message }}'
+          to: ${{ secrets.RECIPIENT_EMAIL }}
+          from: ${{ secrets.MAIL_USERNAME }}
+          body: |
+            🎉 **Android APK Build Successful!**
+            
+            📱 **Build Details:**
+            - Project: CodeAction
+            - Branch: ${{ github.ref_name }}
+            - Commit: ${{ github.sha }}
+            - Commit Message: ${{ github.event.head_commit.message }}
+            - Author: ${{ github.actor }}
+            - Build Time: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            
+            📦 **APK Information:**
+            - Filename: ${{ steps.apk.outputs.name }}
+            - Size: ${{ steps.apk.outputs.size }}
+            - Location: ${{ steps.apk.outputs.path }}
+            
+            🔗 **Download APK:**
+            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            
+            ✨ The APK is available as an artifact in the workflow run.
+            
+            ---
+            This is an automated message from GitHub Actions.
+
+      # Step 8: Send Failure Email
+      - name: Send Failure Email Notification
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.MAIL_SERVER }}
+          server_port: ${{ secrets.MAIL_PORT }}
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: '❌ Android Build FAILED - ${{ github.event.head_commit.message }}'
+          to: ${{ secrets.RECIPIENT_EMAIL }}
+          from: ${{ secrets.MAIL_USERNAME }}
+          body: |
+            ❌ **Android APK Build Failed!**
+            
+            📱 **Build Details:**
+            - Project: CodeAction
+            - Branch: ${{ github.ref_name }}
+            - Commit: ${{ github.sha }}
+            - Commit Message: ${{ github.event.head_commit.message }}
+            - Author: ${{ github.actor }}
+            - Build Time: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            
+            ⚠️ **Please check the build logs for more details:**
+            ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+            
+            ---
+            This is an automated message from GitHub Actions.
+

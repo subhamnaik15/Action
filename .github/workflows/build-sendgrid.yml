@@ -1,0 +1,118 @@
+name: Android Build & SendGrid Email Notification
+
+# This is an ALTERNATIVE workflow using SendGrid
+# Use this if you prefer SendGrid over SMTP
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  JAVA_VERSION: '11'
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      checks: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Build Release APK
+        run: ./gradlew clean assembleRelease --stacktrace
+
+      - name: Find APK file
+        id: apk
+        run: |
+          APK_PATH=$(find . -name "*.apk" -type f | head -1)
+          APK_NAME=$(basename "$APK_PATH")
+          APK_SIZE=$(du -h "$APK_PATH" | cut -f1)
+          echo "path=$APK_PATH" >> $GITHUB_OUTPUT
+          echo "name=$APK_NAME" >> $GITHUB_OUTPUT
+          echo "size=$APK_SIZE" >> $GITHUB_OUTPUT
+
+      - name: Upload APK as Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: CodeAction-APK
+          path: ${{ steps.apk.outputs.path }}
+          retention-days: 30
+
+      - name: Send Success Email via SendGrid
+        if: success()
+        run: |
+          curl --request POST \
+            --url https://api.sendgrid.com/v3/mail/send \
+            --header "Authorization: Bearer ${{ secrets.SENDGRID_API_KEY }}" \
+            --header "Content-Type: application/json" \
+            --data '{
+              "personalizations": [
+                {
+                  "to": [
+                    {
+                      "email": "${{ secrets.RECIPIENT_EMAIL }}"
+                    }
+                  ]
+                }
+              ],
+              "from": {
+                "email": "${{ secrets.SENDGRID_FROM_EMAIL }}"
+              },
+              "subject": "✅ Android Build SUCCESS - ${{ github.event.head_commit.message }}",
+              "content": [
+                {
+                  "type": "text/html",
+                  "value": "<h2>🎉 Android APK Build Successful!</h2><p><strong>Build Details:</strong></p><ul><li>Project: CodeAction</li><li>Branch: ${{ github.ref_name }}</li><li>Commit: ${{ github.sha }}</li><li>Author: ${{ github.actor }}</li><li>APK File: ${{ steps.apk.outputs.name }}</li><li>APK Size: ${{ steps.apk.outputs.size }}</li></ul><p><a href=\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\">View Build Details</a></p>"
+                }
+              ]
+            }'
+
+      - name: Send Failure Email via SendGrid
+        if: failure()
+        run: |
+          curl --request POST \
+            --url https://api.sendgrid.com/v3/mail/send \
+            --header "Authorization: Bearer ${{ secrets.SENDGRID_API_KEY }}" \
+            --header "Content-Type: application/json" \
+            --data '{
+              "personalizations": [
+                {
+                  "to": [
+                    {
+                      "email": "${{ secrets.RECIPIENT_EMAIL }}"
+                    }
+                  ]
+                }
+              ],
+              "from": {
+                "email": "${{ secrets.SENDGRID_FROM_EMAIL }}"
+              },
+              "subject": "❌ Android Build FAILED - ${{ github.event.head_commit.message }}",
+              "content": [
+                {
+                  "type": "text/html",
+                  "value": "<h2>❌ Android APK Build Failed!</h2><p><strong>Build Details:</strong></p><ul><li>Project: CodeAction</li><li>Branch: ${{ github.ref_name }}</li><li>Commit: ${{ github.sha }}</li><li>Author: ${{ github.actor }}</li></ul><p><strong>Please check the build logs for more details:</strong></p><p><a href=\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\">View Build Logs</a></p>"
+                }
+              ]
+            }'
+
