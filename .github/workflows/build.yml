@@ -23,11 +23,9 @@ jobs:
       checks: write
 
     steps:
-      # Step 1: Checkout code
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: Set up JDK 11
       - name: Set up JDK 11
         uses: actions/setup-java@v3
         with:
@@ -35,15 +33,12 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      # Step 3: Make gradlew executable
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      # Step 4: Build the APK
       - name: Build Release APK
         run: ./gradlew clean assembleRelease --stacktrace
 
-      # Step 5: Find the APK file
       - name: Find APK file
         id: apk
         run: |
@@ -55,15 +50,13 @@ jobs:
           echo "size=$APK_SIZE" >> $GITHUB_OUTPUT
           echo "APK Found: $APK_NAME ($APK_SIZE)"
 
-       # Step 6: Upload APK as artifact
-       - name: Upload APK as Artifact
-         uses: actions/upload-artifact@v4
-         with:
-           name: CodeAction-APK
-           path: ${{ steps.apk.outputs.path }}
-           retention-days: 30
+      - name: Upload APK as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CodeAction-APK
+          path: ${{ steps.apk.outputs.path }}
+          retention-days: 30
 
-      # Step 7: Send Success Email
       - name: Send Success Email Notification
         if: success()
         uses: dawidd6/action-send-mail@v3
@@ -77,7 +70,7 @@ jobs:
           from: ${{ secrets.MAIL_USERNAME }}
           body: |
             🎉 **Android APK Build Successful!**
-            
+
             📱 **Build Details:**
             - Project: CodeAction
             - Branch: ${{ github.ref_name }}
@@ -85,21 +78,20 @@ jobs:
             - Commit Message: ${{ github.event.head_commit.message }}
             - Author: ${{ github.actor }}
             - Build Time: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-            
+
             📦 **APK Information:**
             - Filename: ${{ steps.apk.outputs.name }}
             - Size: ${{ steps.apk.outputs.size }}
             - Location: ${{ steps.apk.outputs.path }}
-            
+
             🔗 **Download APK:**
             ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-            
+
             ✨ The APK is available as an artifact in the workflow run.
-            
+
             ---
             This is an automated message from GitHub Actions.
 
-      # Step 8: Send Failure Email
       - name: Send Failure Email Notification
         if: failure()
         uses: dawidd6/action-send-mail@v3
@@ -113,7 +105,7 @@ jobs:
           from: ${{ secrets.MAIL_USERNAME }}
           body: |
             ❌ **Android APK Build Failed!**
-            
+
             📱 **Build Details:**
             - Project: CodeAction
             - Branch: ${{ github.ref_name }}
@@ -121,10 +113,9 @@ jobs:
             - Commit Message: ${{ github.event.head_commit.message }}
             - Author: ${{ github.actor }}
             - Build Time: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-            
+
             ⚠️ **Please check the build logs for more details:**
             ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-            
-            ---
-            This is an automated message from GitHub Actions.
 
+             ---
+             This is an automated message from GitHub Actions.
