@@ -7,19 +7,40 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 env:
   JAVA_VERSION: '11'
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      is_merge: ${{ steps.check.outputs.is_merge }}
+    steps:
+      - name: Checkout repository (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: check
+        name: Check if commit is a merge
+        run: |
+          COMMIT=${{ github.sha }}
+          PARENTS_COUNT=$(git rev-list --parents -n 1 $COMMIT | wc -w)
+          if [ "$PARENTS_COUNT" -ge 3 ]; then
+            echo "is_merge=true" >> "$GITHUB_OUTPUT"
+            echo "Detected merge commit: $COMMIT (parents count=$PARENTS_COUNT)"
+          else
+            echo "is_merge=false" >> "$GITHUB_OUTPUT"
+            echo "Not a merge commit: $COMMIT (parents count=$PARENTS_COUNT)"
+          fi
+
   build:
     name: Build APK
+    needs: prepare
     runs-on: ubuntu-latest
-
+    if: ${{ needs.prepare.outputs.is_merge == 'true' || github.event_name == 'workflow_dispatch' }}
     permissions:
       contents: read
       checks: write
@@ -28,12 +49,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-       - name: Set up JDK 11
-         uses: actions/setup-java@v4
-         with:
-           java-version: '11'
-           distribution: 'temurin'
-           cache: gradle
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: gradle
 
       - name: Make gradlew executable
         run: chmod +x ./gradlew
@@ -51,15 +72,15 @@ jobs:
           echo "name=$APK_NAME" >> $GITHUB_OUTPUT
           echo "size=$APK_SIZE" >> $GITHUB_OUTPUT
 
-       - name: Upload APK as Artifact
-         uses: actions/upload-artifact@v4
-         with:
-           name: CodeAction-APK
-           path: ${{ steps.apk.outputs.path }}
-           retention-days: 30
+      - name: Upload APK as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CodeAction-APK
+          path: ${{ steps.apk.outputs.path }}
+          retention-days: 30
 
       - name: Send Success Email via SendGrid
-        if: success()
+        if: success() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         run: |
           curl --request POST \
             --url https://api.sendgrid.com/v3/mail/send \
@@ -88,7 +109,7 @@ jobs:
             }'
 
       - name: Send Failure Email via SendGrid
-        if: failure()
+        if: failure() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         run: |
           curl --request POST \
             --url https://api.sendgrid.com/v3/mail/send \
